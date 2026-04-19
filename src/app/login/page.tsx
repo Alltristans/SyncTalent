@@ -3,8 +3,11 @@
 import { signIn } from "next-auth/react";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
+  const searchParams = useSearchParams();
+  const isRegistered = searchParams.get("registered") === "1";
   const [email, setEmail] = useState("candidate@jobmatch.ai");
   const [password, setPassword] = useState("Password123!");
   const [isLoading, setIsLoading] = useState(false);
@@ -40,6 +43,10 @@ export default function LoginPage() {
           Demo employer: employer@jobmatch.ai / Password123!
         </p>
 
+        {isRegistered ? (
+          <p className="mb-4 text-sm text-green-300">Registration successful. Please log in.</p>
+        ) : null}
+
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div>
             <label className="block text-sm mb-1">Email</label>
@@ -74,7 +81,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <Link href="/" className="block mt-5 text-sm text-accent-blue hover:underline">
+        <div className="mt-5 text-sm text-white/70">
+          No account yet?{" "}
+          <Link href="/register" className="text-accent-blue hover:underline">
+            Register here
+          </Link>
+        </div>
+
+        <Link href="/" className="block mt-3 text-sm text-accent-blue hover:underline">
           Back to home
         </Link>
       </div>
