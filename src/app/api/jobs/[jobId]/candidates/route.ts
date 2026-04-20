@@ -20,11 +20,11 @@ export async function GET(_: Request, ctx: { params: Promise<{ jobId: string }> 
   });
 
   if (!job) {
-    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+    return NextResponse.json({ error: "Job not found." }, { status: 404 });
   }
 
   if (job.employerId !== session.user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const candidates = await prisma.candidateProfile.findMany({
@@ -34,13 +34,22 @@ export async function GET(_: Request, ctx: { params: Promise<{ jobId: string }> 
     }
   });
 
-  const requiredSkills = job.jobSkills.filter((entry) => entry.required).map((entry) => entry.skill.name);
-  const preferredSkills = job.jobSkills.filter((entry) => !entry.required).map((entry) => entry.skill.name);
+  const requiredSkills = job.jobSkills
+    .filter((entry) => entry.required)
+    .map((entry) => entry.skill.name);
+  const preferredSkills = job.jobSkills
+    .filter((entry) => !entry.required)
+    .map((entry) => entry.skill.name);
 
   const rankedCandidates = candidates
     .map((candidate) => {
+      const candidateSkills = candidate.skills.map((entry) => ({
+        name: entry.skill.name,
+        level: entry.level
+      }));
+
       const match = computeMatch({
-        candidateSkills: candidate.skills.map((entry) => entry.skill.name),
+        candidateSkills,
         requiredSkills,
         preferredSkills,
         threshold: job.threshold,

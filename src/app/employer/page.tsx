@@ -22,6 +22,7 @@ type RankedCandidate = {
   score: number;
   hardLocked: boolean;
   summary: string;
+  matchedRequired: string[];
   missingRequired: string[];
 };
 
@@ -31,12 +32,14 @@ export default function EmployerDashboard() {
   const [error, setError] = useState("");
   const [selectedJobId, setSelectedJobId] = useState<string>("");
   const [rankedCandidates, setRankedCandidates] = useState<RankedCandidate[]>([]);
+  const [companyName, setCompanyName] = useState<string>("");
 
-  const [title, setTitle] = useState("Supply Chain Manager");
-  const [description, setDescription] = useState("Lead supply chain optimization with data-driven planning.");
-  const [threshold, setThreshold] = useState(80);
-  const [requiredSkillsText, setRequiredSkillsText] = useState("Supply Chain, Data Analysis");
-  const [preferredSkillsText, setPreferredSkillsText] = useState("Azure AI, Communication");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [threshold, setThreshold] = useState(70);
+  const [requiredSkillsText, setRequiredSkillsText] = useState("");
+  const [preferredSkillsText, setPreferredSkillsText] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadJobs = async () => {
     setError("");
@@ -48,7 +51,13 @@ export default function EmployerDashboard() {
       return;
     }
 
-    setJobs(data.jobs ?? []);
+    const jobList: JobItem[] = data.jobs ?? [];
+    setJobs(jobList);
+
+    // Derive company name from first job posted by this employer (employer-only jobs show their own)
+    if (jobList.length > 0 && !companyName) {
+      setCompanyName(jobList[0].companyName);
+    }
   };
 
   const loadRankedCandidates = async (jobId: string) => {
@@ -68,16 +77,17 @@ export default function EmployerDashboard() {
 
   useEffect(() => {
     loadJobs();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onCreateJob = async (event: FormEvent) => {
     event.preventDefault();
+    setIsSubmitting(true);
+    setError("");
 
     const response = await fetch("/api/jobs", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         title,
         description,
@@ -87,6 +97,7 @@ export default function EmployerDashboard() {
       })
     });
     const data = await response.json();
+    setIsSubmitting(false);
 
     if (!response.ok) {
       setError(data.error?.formErrors?.[0] ?? data.error ?? "Failed to create job.");
@@ -94,9 +105,16 @@ export default function EmployerDashboard() {
     }
 
     setIsPosting(false);
+    setTitle("");
+    setDescription("");
+    setThreshold(70);
+    setRequiredSkillsText("");
+    setPreferredSkillsText("");
     await loadJobs();
     await loadRankedCandidates(data.job.id);
   };
+
+  const totalApplicants = jobs.reduce((sum, item) => sum + item.applicationsCount, 0);
 
   return (
     <main className="min-h-screen bg-mesh pt-32 px-6">
@@ -104,7 +122,7 @@ export default function EmployerDashboard() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-3xl font-bold">Employer Portal</h1>
-          <button 
+          <button
             onClick={() => setIsPosting(true)}
             className="px-6 py-2 bg-accent-blue text-white rounded-lg flex items-center gap-2 hover:bg-blue-600 transition-colors"
           >
@@ -121,7 +139,7 @@ export default function EmployerDashboard() {
                   <Building className="w-8 h-8 text-accent-blue" />
                 </div>
                 <div>
-                  <h2 className="font-bold text-xl">LogiTech Solutions</h2>
+                  <h2 className="font-bold text-xl">{companyName || "Your Company"}</h2>
                   <p className="text-sm text-white/40 flex items-center gap-1">
                     <ShieldCheck className="w-4 h-4 text-green-400" /> SafePlace Verified
                   </p>
@@ -134,7 +152,7 @@ export default function EmployerDashboard() {
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-white/40">Total Applicants</span>
-                  <span className="font-medium">{jobs.reduce((sum, item) => sum + item.applicationsCount, 0)}</span>
+                  <span className="font-medium">{totalApplicants}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-white/40">Matching Rate</span>
@@ -148,30 +166,38 @@ export default function EmployerDashboard() {
                 <ListChecks className="w-5 h-5" /> Precision Stats
               </h3>
               <p className="text-sm text-white/60 leading-relaxed">
-                Your high threshold for matching has saved your HR team approximately 45 hours of manual screening last month.
+                Hard-lock matching ensures only qualified candidates reach your HR team.
               </p>
             </div>
           </div>
 
           {/* Active Jobs */}
           <div className="lg:col-span-2 space-y-6">
-            {error ? <div className="glass-card p-4 border border-red-500/40 text-red-300 text-sm">{error}</div> : null}
+            {error ? (
+              <div className="glass-card p-4 border border-red-500/40 text-red-300 text-sm">{error}</div>
+            ) : null}
 
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Users className="w-5 h-5 text-accent-blue" /> Currently Hiring
             </h2>
-            
+
             <div className="grid gap-4">
-              {jobs.map((job) => (
-                <JobRow
-                  key={job.id}
-                  title={job.title}
-                  matchingCandidates={job.applicationsCount}
-                  totalApplicants={job.applicationsCount}
-                  status={`Threshold ${job.threshold}%`}
-                  onManage={() => loadRankedCandidates(job.id)}
-                />
-              ))}
+              {jobs.length === 0 ? (
+                <div className="glass-card p-8 text-center text-white/40 text-sm">
+                  No positions posted yet. Click &quot;Post New Position&quot; to get started.
+                </div>
+              ) : (
+                jobs.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    title={job.title}
+                    applicationsCount={job.applicationsCount}
+                    threshold={job.threshold}
+                    isSelected={selectedJobId === job.id}
+                    onManage={() => loadRankedCandidates(job.id)}
+                  />
+                ))
+              )}
             </div>
 
             {selectedJobId ? (
@@ -185,13 +211,27 @@ export default function EmployerDashboard() {
                       <div key={candidate.candidateId} className="p-3 rounded-lg border border-white/10 bg-white/5">
                         <div className="flex items-center justify-between">
                           <p className="font-semibold">{candidate.candidateName}</p>
-                          <p className="text-sm">{candidate.score}%</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold">{candidate.score}%</p>
+                            {candidate.hardLocked ? (
+                              <span className="text-xs px-2 py-0.5 rounded bg-red-500/20 text-red-300 border border-red-500/20">
+                                Hard-locked
+                              </span>
+                            ) : (
+                              <span className="text-xs px-2 py-0.5 rounded bg-green-500/20 text-green-300 border border-green-500/20">
+                                Eligible
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-white/50 mt-1">{candidate.summary}</p>
-                        {candidate.missingRequired.length ? (
+                        {candidate.missingRequired.length > 0 ? (
                           <div className="mt-2 flex flex-wrap gap-2">
                             {candidate.missingRequired.map((skill) => (
-                              <span key={skill} className="text-xs px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-300">
+                              <span
+                                key={skill}
+                                className="text-xs px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-300"
+                              >
                                 Missing: {skill}
                               </span>
                             ))}
@@ -207,46 +247,83 @@ export default function EmployerDashboard() {
         </div>
       </div>
 
-      {/* Mock Posting Modal */}
       {isPosting && (
         <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center p-6">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className="glass-card max-w-2xl w-full p-8 relative"
           >
-            <button onClick={() => setIsPosting(false)} className="absolute top-4 right-4 text-white/40 hover:text-white">
+            <button
+              onClick={() => setIsPosting(false)}
+              className="absolute top-4 right-4 text-white/40 hover:text-white"
+            >
               <ArrowLeft className="w-6 h-6 rotate-180" />
             </button>
             <h2 className="text-2xl font-bold mb-6">Create New Opportunity</h2>
             <form className="space-y-4" onSubmit={onCreateJob}>
               <div>
                 <label className="block text-sm font-medium mb-1">Job Title</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)} type="text" className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none" placeholder="e.g. Senior Logistics Coordinator" />
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  type="text"
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none"
+                  placeholder="e.g. Senior Logistics Coordinator"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Matching Threshold</label>
-                  <input value={threshold} onChange={(e) => setThreshold(Number(e.target.value))} type="number" min={1} max={100} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none" />
+                  <label className="block text-sm font-medium mb-1">Matching Threshold (%)</label>
+                  <input
+                    value={threshold}
+                    onChange={(e) => setThreshold(Number(e.target.value))}
+                    type="number"
+                    min={1}
+                    max={100}
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Required Skills (comma separated)</label>
-                  <input value={requiredSkillsText} onChange={(e) => setRequiredSkillsText(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none" />
+                  <input
+                    value={requiredSkillsText}
+                    onChange={(e) => setRequiredSkillsText(e.target.value)}
+                    required
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none"
+                    placeholder="e.g. Supply Chain, SQL"
+                  />
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-1">Preferred Skills (comma separated)</label>
-                <input value={preferredSkillsText} onChange={(e) => setPreferredSkillsText(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none" />
+                <input
+                  value={preferredSkillsText}
+                  onChange={(e) => setPreferredSkillsText(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none"
+                  placeholder="e.g. Azure AI, Communication"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Narrative Description (For AI Analysis)</label>
-                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none" placeholder="Describe the role in detail. Our AI will extract the necessary skills from this text." />
+                <label className="block text-sm font-medium mb-1">Role Description</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 focus:border-accent-blue outline-none"
+                  placeholder="Describe the role, responsibilities, and context."
+                />
               </div>
-              <button 
+              {error ? <p className="text-red-300 text-sm">{error}</p> : null}
+              <button
                 type="submit"
-                className="w-full py-3 bg-accent-blue text-white rounded-lg font-bold mt-4"
+                disabled={isSubmitting}
+                className="w-full py-3 bg-accent-blue text-white rounded-lg font-bold mt-4 disabled:opacity-50"
               >
-                Publish Posting
+                {isSubmitting ? "Publishing..." : "Publish Posting"}
               </button>
             </form>
           </motion.div>
@@ -256,25 +333,38 @@ export default function EmployerDashboard() {
   );
 }
 
-function JobRow({ title, matchingCandidates, totalApplicants, status, onManage }: { title: string, matchingCandidates: number, totalApplicants: number, status: string, onManage: () => void }) {
+function JobRow({
+  title,
+  applicationsCount,
+  threshold,
+  isSelected,
+  onManage
+}: {
+  title: string;
+  applicationsCount: number;
+  threshold: number;
+  isSelected: boolean;
+  onManage: () => void;
+}) {
   return (
-    <div className="glass-card p-6 flex flex-col md:flex-row items-center justify-between gap-4 hover:bg-white/5 transition-colors">
+    <div
+      className={`glass-card p-6 flex flex-col md:flex-row items-center justify-between gap-4 transition-colors ${isSelected ? "border border-accent-blue/40 bg-accent-blue/5" : "hover:bg-white/5"}`}
+    >
       <div>
         <h3 className="font-bold text-lg">{title}</h3>
-        <p className="text-sm text-white/40">{status} • Posted 2 days ago</p>
+        <p className="text-sm text-white/40">Threshold {threshold}%</p>
       </div>
       <div className="flex gap-8">
         <div className="text-center">
-          <p className="text-2xl font-bold text-accent-blue">{matchingCandidates}</p>
-          <p className="text-xs text-white/40 uppercase tracking-wider">Matched</p>
-        </div>
-        <div className="text-center border-l border-white/10 pl-8">
-          <p className="text-2xl font-bold">{totalApplicants}</p>
-          <p className="text-xs text-white/40 uppercase tracking-wider">Total</p>
+          <p className="text-2xl font-bold text-accent-blue">{applicationsCount}</p>
+          <p className="text-xs text-white/40 uppercase tracking-wider">Applicants</p>
         </div>
       </div>
-      <button onClick={onManage} className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors">
-        Manage
+      <button
+        onClick={onManage}
+        className="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-sm font-medium hover:bg-white/10 transition-colors"
+      >
+        View Candidates
       </button>
     </div>
   );
