@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JobMatch AI | Workforce Upskilling",
   description: "AI-driven job matching and workforce upskilling platform powered by Azure services.",
+  other: {
+    "dicoding:email": "fajardios01@gmail.com",
+  },
 };
 
 export default function RootLayout({
